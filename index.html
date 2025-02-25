@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Temperature Monitoring Dashboard</title>
+    <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+    <style>
+        /* General Styles */
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f6f8;
+            color: #333;
+        }
+        h1 {
+            text-align: center;
+            font-size: 2rem;
+            font-weight: bold;
+            margin: 20px 0;
+            color: #2c3e50;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        /* Controls Section */
+        .controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .controls-left {
+            display: flex;
+            gap: 15px;
+        }
+        .controls-right {
+            display: flex;
+            gap: 15px;
+        }
+        .controls label {
+            font-weight: bold;
+            color: #555;
+        }
+        .controls input[type="checkbox"] {
+            margin-right: 5px;
+        }
+        .controls input[type="date"], .controls input[type="number"] {
+            padding: 5px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        .controls button {
+            padding: 5px 10px;
+            background-color: #2980b9;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .controls button:hover {
+            background-color: #1f618d;
+        }
+
+        /* Chart Section */
+        #chart_div {
+            width: 100%;
+            height: 500px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Real-Time Data Display */
+        .real-time-data {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin-top: 20px;
+        }
+        .real-time-data div {
+            text-align: center;
+            padding: 10px;
+            background-color: #ecf0f1;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        .real-time-data span {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+        .real-time-data small {
+            display: block;
+            font-size: 0.9rem;
+            color: #7f8c8d;
+        }
+    </style>
+    <script>
+        google.charts.load('current', {'packages': ['corechart']});
+        google.charts.setOnLoadCallback(fetchData);
+
+        let chartData = [];
+        let selectedPhases = { R: true, Y: true, B: true };
+        let threshold = null;
+
+        function fetchData() {
+            fetch("https://docs.google.com/spreadsheets/d/1l4xn1VXk9y4uFU--L3L5GzY3JJ8jaX_PNxYWQCpEh0Y/gviz/tq?tqx=out:json")
+                .then(response => response.text())
+                .then(data => {
+                    const json = JSON.parse(data.substr(47).slice(0, -2));
+                    chartData = json.table.rows.map(row => [
+                        new Date(row.c[0].v),   // Timestamp
+                        row.c[1].v,             // Phase R
+                        row.c[2].v,             // Phase Y
+                        row.c[3].v              // Phase B
+                    ]);
+                    drawChart();
+                    updateRealTimeTemperatures();
+                });
+        }
+
+        function drawChart() {
+            const filteredData = chartData.map(row => {
+                const newRow = [row[0]]; // Always include timestamp
+                if (selectedPhases.R) newRow.push(row[1]);
+                if (selectedPhases.Y) newRow.push(row[2]);
+                if (selectedPhases.B) newRow.push(row[3]);
+                return newRow;
+            });
+
+            const data = new google.visualization.DataTable();
+            data.addColumn('datetime', 'Time');
+            if (selectedPhases.R) data.addColumn('number', 'Phase R (°C)');
+            if (selectedPhases.Y) data.addColumn('number', 'Phase Y (°C)');
+            if (selectedPhases.B) data.addColumn('number', 'Phase B (°C)');
+
+            // Add threshold line as a separate series
+            if (threshold !== null) {
+                data.addColumn({ type: 'number', role: 'line' }, 'Threshold');
+                filteredData.forEach(row => row.push(threshold));
+            }
+
+            data.addRows(filteredData);
+
+            const options = {
+                title: 'Temperature Trends',
+                curveType: 'function',
+                legend: { position: 'bottom' },
+                hAxis: { title: 'Time' },
+                vAxis: { title: 'Temperature (°C)' },
+                backgroundColor: '#ffffff',
+                series: {
+                    0: { color: '#FF5733', lineWidth: 2, pointSize: 5 }, // Red for Phase R
+                    1: { color: '#F3C623', lineWidth: 2, pointSize: 5 }, // Yellow for Phase Y
+                    2: { color: '#33A1FF', lineWidth: 2, pointSize: 5 }, // Blue for Phase B
+                    3: { color: '#AAAAAA', lineWidth: 2, pointSize: 0 }  // Grey for Threshold
+                },
+                pointShape: 'circle', // Aesthetic dots on the lines
+                pointSize: 5,         // Size of the dots
+                explorer: {
+                    actions: ['dragToZoom', 'rightClickToReset'], // Enable zoom and reset
+                    axis: 'horizontal',                          // Allow zooming horizontally
+                    keepInBounds: true,                         // Prevent zooming outside bounds
+                    maxZoomIn: 0.01,                            // Limit how far you can zoom in
+                    scrollWheel: true                           // Enable zooming with the mouse wheel
+                }
+            };
+
+            const chart = new google.visualization.LineChart(document.getElementById('chart_div'));
+            chart.draw(data, options);
+        }
+
+        function updateRealTimeTemperatures() {
+            if (chartData.length === 0) return;
+
+            const latestData = chartData[chartData.length - 1];
+            document.getElementById('tempR').textContent = latestData[1]?.toFixed(2) || 'N/A';
+            document.getElementById('tempY').textContent = latestData[2]?.toFixed(2) || 'N/A';
+            document.getElementById('tempB').textContent = latestData[3]?.toFixed(2) || 'N/A';
+        }
+
+        function updateChart() {
+            selectedPhases.R = document.getElementById('phaseR').checked;
+            selectedPhases.Y = document.getElementById('phaseY').checked;
+            selectedPhases.B = document.getElementById('phaseB').checked;
+            drawChart();
+        }
+
+        function applyDateRange() {
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+
+            if (startDate && endDate) {
+                const start = new Date(startDate);
+                const end = new Date(endDate);
+
+                chartData = chartData.filter(row => {
+                    const date = row[0];
+                    return date >= start && date <= end;
+                });
+            }
+            drawChart();
+        }
+
+        function setThreshold() {
+            const value = parseFloat(document.getElementById('thresholdInput').value);
+            if (!isNaN(value)) {
+                threshold = value;
+                drawChart();
+            } else {
+                alert('Please enter a valid number for the threshold.');
+            }
+        }
+    </script>
+</head>
+<body>
+    <div class="container">
+        <h1>Temperature Monitoring Dashboard</h1>
+
+        <!-- Controls Section -->
+        <div class="controls">
+            <div class="controls-left">
+                <label>
+                    <input type="checkbox" id="phaseR" checked onchange="updateChart()"> Phase R
+                </label>
+                <label>
+                    <input type="checkbox" id="phaseY" checked onchange="updateChart()"> Phase Y
+                </label>
+                <label>
+                    <input type="checkbox" id="phaseB" checked onchange="updateChart()"> Phase B
+                </label>
+            </div>
+            <div class="controls-right">
+                <label for="startDate">Start Date:</label>
+                <input type="date" id="startDate">
+                <label for="endDate">End Date:</label>
+                <input type="date" id="endDate">
+                <button onclick="applyDateRange()">Apply Date Range</button>
+
+                <label for="thresholdInput">Threshold (°C):</label>
+                <input type="number" id="thresholdInput" placeholder="e.g., 50">
+                <button onclick="setThreshold()">Set Threshold</button>
+            </div>
+        </div>
+
+        <!-- Chart Section -->
+        <div id="chart_div"></div>
+
+        <!-- Real-Time Temperature Display -->
+        <div class="real-time-data">
+            <div>
+                <span id="tempR">N/A</span>
+                <small>Phase R (°C)</small>
+            </div>
+            <div>
+                <span id="tempY">N/A</span>
+                <small>Phase Y (°C)</small>
+            </div>
+            <div>
+                <span id="tempB">N/A</span>
+                <small>Phase B (°C)</small>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Refresh data every 30 seconds
+        setInterval(fetchData, 30000);
+    </script>
+</body>
+</html>
