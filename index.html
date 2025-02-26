@@ -4,273 +4,448 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Temperature Monitoring Dashboard</title>
-    <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- ApexCharts -->
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
     <style>
-        /* General Styles */
         body {
             font-family: 'Arial', sans-serif;
-            margin: 0;
-            padding: 0;
             background-color: #f4f6f8;
             color: #333;
         }
-        h1 {
-            text-align: center;
-            font-size: 2rem;
-            font-weight: bold;
-            margin: 20px 0;
-            color: #2c3e50;
-        }
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-
-        /* Controls Section */
-        .controls {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
+        
+        .card {
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
             margin-bottom: 20px;
         }
-        .controls-left {
-            display: flex;
-            gap: 15px;
-        }
-        .controls-right {
-            display: flex;
-            gap: 15px;
-        }
-        .controls label {
+        
+        .card-header {
+            background-color: #f8f9fa;
+            border-bottom: 1px solid #eee;
             font-weight: bold;
-            color: #555;
         }
-        .controls input[type="checkbox"] {
-            margin-right: 5px;
-        }
-        .controls input[type="date"], .controls input[type="number"] {
-            padding: 5px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-        }
-        .controls button {
-            padding: 5px 10px;
-            background-color: #2980b9;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-        .controls button:hover {
-            background-color: #1f618d;
-        }
-
-        /* Chart Section */
-        #chart_div {
-            width: 100%;
-            height: 500px;
-            background-color: #fff;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-
-        /* Real-Time Data Display */
-        .real-time-data {
-            display: flex;
-            justify-content: center;
-            gap: 30px;
-            margin-top: 20px;
-        }
-        .real-time-data div {
+        
+        .temp-display {
+            font-size: 1.8rem;
+            font-weight: bold;
             text-align: center;
-            padding: 10px;
-            background-color: #ecf0f1;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }
-        .real-time-data span {
-            font-size: 1.2rem;
-            font-weight: bold;
-            color: #2c3e50;
-        }
-        .real-time-data small {
-            display: block;
+        
+        .temp-label {
             font-size: 0.9rem;
-            color: #7f8c8d;
+            color: #6c757d;
+            text-align: center;
+        }
+        
+        #chart {
+            min-height: 400px;
         }
     </style>
+</head>
+<body>
+    <div class="container py-4">
+        <h1 class="text-center mb-4">Temperature Monitoring Dashboard</h1>
+        
+        <!-- Filters and Controls -->
+        <div class="row mb-4">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header">Filters & Controls</div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="d-flex gap-3 mb-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="phaseR" checked>
+                                        <label class="form-check-label" for="phaseR">
+                                            Phase R
+                                        </label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="phaseY" checked>
+                                        <label class="form-check-label" for="phaseY">
+                                            Phase Y
+                                        </label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="phaseB" checked>
+                                        <label class="form-check-label" for="phaseB">
+                                            Phase B
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label for="dateFilter" class="form-label">Select Date:</label>
+                                        <input type="date" class="form-control" id="dateFilter">
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <label for="thresholdInput" class="form-label">Threshold (°C):</label>
+                                        <input type="number" class="form-control" id="thresholdInput" placeholder="e.g., 50">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Chart Section -->
+        <div class="row mb-4">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header">Temperature Trends</div>
+                    <div class="card-body">
+                        <div id="chart"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Real-Time Data Display -->
+        <div class="row">
+            <div class="col-md-4 mb-3">
+                <div class="card">
+                    <div class="card-body">
+                        <div class="temp-display" id="tempR">N/A</div>
+                        <div class="temp-label">Phase R (°C)</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4 mb-3">
+                <div class="card">
+                    <div class="card-body">
+                        <div class="temp-display" id="tempY">N/A</div>
+                        <div class="temp-label">Phase Y (°C)</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4 mb-3">
+                <div class="card">
+                    <div class="card-body">
+                        <div class="temp-display" id="tempB">N/A</div>
+                        <div class="temp-label">Phase B (°C)</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap Bundle with Popper -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    
     <script>
-        google.charts.load('current', {'packages': ['corechart']});
-        google.charts.setOnLoadCallback(fetchData);
-
         let chartData = [];
-        let selectedPhases = { R: true, Y: true, B: true };
+        let chart;
         let threshold = null;
+        
+        // Initialize chart with empty data
+        function initChart() {
+            const options = {
+                series: [
+                    { name: 'Phase R (°C)', data: [] },
+                    { name: 'Phase Y (°C)', data: [] },
+                    { name: 'Phase B (°C)', data: [] }
+                ],
+                chart: {
+                    type: 'line',
+                    height: 400,
+                    fontFamily: 'Arial, sans-serif',
+                    animations: {
+                        enabled: true,
+                        easing: 'easeinout',
+                        speed: 800,
+                        animateGradually: {
+                            enabled: true,
+                            delay: 150
+                        },
+                        dynamicAnimation: {
+                            enabled: true,
+                            speed: 350
+                        }
+                    },
+                    toolbar: {
+                        show: true,
+                        tools: {
+                            download: true,
+                            selection: true,
+                            zoom: true,
+                            zoomin: true,
+                            zoomout: true,
+                            pan: true,
+                            reset: true
+                        },
+                        autoSelected: 'zoom'
+                    }
+                },
+                colors: ['#FF5733', '#F3C623', '#33A1FF'],
+                dataLabels: {
+                    enabled: false
+                },
+                stroke: {
+                    curve: 'smooth',
+                    width: 2
+                },
+                markers: {
+                    size: 4,
+                    hover: {
+                        size: 6
+                    }
+                },
+                xaxis: {
+                    type: 'datetime',
+                    labels: {
+                        datetimeUTC: false,
+                        format: 'HH:mm'
+                    },
+                    title: {
+                        text: 'Time'
+                    }
+                },
+                yaxis: {
+                    title: {
+                        text: 'Temperature (°C)'
+                    },
+                    forceNiceScale: true,
+                    labels: {
+                        formatter: function(val) {
+                            return val.toFixed(2);
+                        }
+                    }
+                },
+                tooltip: {
+                    x: {
+                        format: 'dd MMM yyyy HH:mm'
+                    },
+                    y: {
+                        formatter: function(val) {
+                            return val.toFixed(2) + ' °C';
+                        }
+                    }
+                },
+                legend: {
+                    position: 'bottom'
+                },
+                grid: {
+                    borderColor: '#e0e0e0',
+                    row: {
+                        colors: ['#f3f3f3', 'transparent'],
+                        opacity: 0.5
+                    }
+                },
+                annotations: {
+                    yaxis: []
+                }
+            };
 
+            chart = new ApexCharts(document.querySelector("#chart"), options);
+            chart.render();
+        }
+
+        // Fetch data from the spreadsheet
         function fetchData() {
             fetch("https://docs.google.com/spreadsheets/d/1l4xn1VXk9y4uFU--L3L5GzY3JJ8jaX_PNxYWQCpEh0Y/gviz/tq?tqx=out:json")
                 .then(response => response.text())
                 .then(data => {
                     const json = JSON.parse(data.substr(47).slice(0, -2));
-                    chartData = json.table.rows.map(row => [
-                        new Date(row.c[0].v),   // Timestamp
-                        row.c[1].v,             // Phase R
-                        row.c[2].v,             // Phase Y
-                        row.c[3].v              // Phase B
-                    ]);
-                    drawChart();
+                    
+                    // Process the data
+                    chartData = json.table.rows.map(row => {
+                        return {
+                            timestamp: new Date(row.c[0].v),
+                            phaseR: row.c[1].v,
+                            phaseY: row.c[2].v,
+                            phaseB: row.c[3].v
+                        };
+                    });
+                    
+                    // Group data by 10-minute intervals
+                    chartData = processDataBy10MinIntervals(chartData);
+                    
+                    // Set the date filter to today if it's not already set
+                    const dateFilter = document.getElementById('dateFilter');
+                    if (!dateFilter.value) {
+                        const today = new Date();
+                        const formattedDate = formatDateForInput(today);
+                        dateFilter.value = formattedDate;
+                    }
+                    
+                    updateChart();
                     updateRealTimeTemperatures();
+                })
+                .catch(error => {
+                    console.error('Error fetching data:', error);
                 });
         }
-
-        function drawChart() {
-            const filteredData = chartData.map(row => {
-                const newRow = [row[0]]; // Always include timestamp
-                if (selectedPhases.R) newRow.push(row[1]);
-                if (selectedPhases.Y) newRow.push(row[2]);
-                if (selectedPhases.B) newRow.push(row[3]);
-                return newRow;
-            });
-
-            const data = new google.visualization.DataTable();
-            data.addColumn('datetime', 'Time');
-            if (selectedPhases.R) data.addColumn('number', 'Phase R (°C)');
-            if (selectedPhases.Y) data.addColumn('number', 'Phase Y (°C)');
-            if (selectedPhases.B) data.addColumn('number', 'Phase B (°C)');
-
-            // Add threshold line as a separate series
-            if (threshold !== null) {
-                data.addColumn({ type: 'number', role: 'line' }, 'Threshold');
-                filteredData.forEach(row => row.push(threshold));
-            }
-
-            data.addRows(filteredData);
-
-            const options = {
-                title: 'Temperature Trends',
-                curveType: 'function',
-                legend: { position: 'bottom' },
-                hAxis: { title: 'Time' },
-                vAxis: { title: 'Temperature (°C)' },
-                backgroundColor: '#ffffff',
-                series: {
-                    0: { color: '#FF5733', lineWidth: 2, pointSize: 5 }, // Red for Phase R
-                    1: { color: '#F3C623', lineWidth: 2, pointSize: 5 }, // Yellow for Phase Y
-                    2: { color: '#33A1FF', lineWidth: 2, pointSize: 5 }, // Blue for Phase B
-                    3: { color: '#AAAAAA', lineWidth: 2, pointSize: 0 }  // Grey for Threshold
-                },
-                pointShape: 'circle', // Aesthetic dots on the lines
-                pointSize: 5,         // Size of the dots
-                explorer: {
-                    actions: ['dragToZoom', 'rightClickToReset'], // Enable zoom and reset
-                    axis: 'horizontal',                          // Allow zooming horizontally
-                    keepInBounds: true,                         // Prevent zooming outside bounds
-                    maxZoomIn: 0.01,                            // Limit how far you can zoom in
-                    scrollWheel: true                           // Enable zooming with the mouse wheel
-                }
-            };
-
-            const chart = new google.visualization.LineChart(document.getElementById('chart_div'));
-            chart.draw(data, options);
+        
+        // Format date for input field (YYYY-MM-DD)
+        function formatDateForInput(date) {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
         }
 
-        function updateRealTimeTemperatures() {
+        // Process data into 10-minute intervals
+        function processDataBy10MinIntervals(data) {
+            const intervalMap = new Map();
+            
+            data.forEach(item => {
+                // Round to the nearest 10-minute interval
+                const date = new Date(item.timestamp);
+                date.setMinutes(Math.floor(date.getMinutes() / 10) * 10);
+                date.setSeconds(0);
+                date.setMilliseconds(0);
+                
+                const key = date.getTime();
+                
+                if (!intervalMap.has(key)) {
+                    intervalMap.set(key, {
+                        timestamp: date,
+                        phaseR: [],
+                        phaseY: [],
+                        phaseB: []
+                    });
+                }
+                
+                intervalMap.get(key).phaseR.push(item.phaseR);
+                intervalMap.get(key).phaseY.push(item.phaseY);
+                intervalMap.get(key).phaseB.push(item.phaseB);
+            });
+            
+            // Calculate average for each interval
+            return Array.from(intervalMap.values()).map(interval => {
+                return {
+                    timestamp: interval.timestamp,
+                    phaseR: calculateAverage(interval.phaseR),
+                    phaseY: calculateAverage(interval.phaseY),
+                    phaseB: calculateAverage(interval.phaseB)
+                };
+            }).sort((a, b) => a.timestamp - b.timestamp);
+        }
+
+        // Calculate average of an array
+        function calculateAverage(arr) {
+            if (arr.length === 0) return null;
+            const sum = arr.reduce((acc, val) => acc + val, 0);
+            return sum / arr.length;
+        }
+
+        // Update the chart with the latest data
+        function updateChart() {
             if (chartData.length === 0) return;
 
-            const latestData = chartData[chartData.length - 1];
-            document.getElementById('tempR').textContent = latestData[1]?.toFixed(2) || 'N/A';
-            document.getElementById('tempY').textContent = latestData[2]?.toFixed(2) || 'N/A';
-            document.getElementById('tempB').textContent = latestData[3]?.toFixed(2) || 'N/A';
-        }
-
-        function updateChart() {
-            selectedPhases.R = document.getElementById('phaseR').checked;
-            selectedPhases.Y = document.getElementById('phaseY').checked;
-            selectedPhases.B = document.getElementById('phaseB').checked;
-            drawChart();
-        }
-
-        function applyDateRange() {
-            const startDate = document.getElementById('startDate').value;
-            const endDate = document.getElementById('endDate').value;
-
-            if (startDate && endDate) {
-                const start = new Date(startDate);
-                const end = new Date(endDate);
-
-                chartData = chartData.filter(row => {
-                    const date = row[0];
-                    return date >= start && date <= end;
+            const showPhaseR = document.getElementById('phaseR').checked;
+            const showPhaseY = document.getElementById('phaseY').checked;
+            const showPhaseB = document.getElementById('phaseB').checked;
+            
+            // Filter by date if selected
+            let filteredData = chartData;
+            const dateFilter = document.getElementById('dateFilter').value;
+            
+            if (dateFilter) {
+                const selectedDate = new Date(dateFilter);
+                filteredData = chartData.filter(item => {
+                    const itemDate = new Date(item.timestamp);
+                    return itemDate.getFullYear() === selectedDate.getFullYear() &&
+                           itemDate.getMonth() === selectedDate.getMonth() &&
+                           itemDate.getDate() === selectedDate.getDate();
                 });
             }
-            drawChart();
+            
+            // Prepare series data
+            const seriesData = [
+                {
+                    name: 'Phase R (°C)',
+                    data: showPhaseR ? filteredData.map(item => [item.timestamp.getTime(), item.phaseR]) : []
+                },
+                {
+                    name: 'Phase Y (°C)',
+                    data: showPhaseY ? filteredData.map(item => [item.timestamp.getTime(), item.phaseY]) : []
+                },
+                {
+                    name: 'Phase B (°C)',
+                    data: showPhaseB ? filteredData.map(item => [item.timestamp.getTime(), item.phaseB]) : []
+                }
+            ];
+            
+            // Update chart series
+            chart.updateSeries(seriesData);
+            
+            // Update threshold line if set
+            updateThresholdLine();
         }
 
-        function setThreshold() {
-            const value = parseFloat(document.getElementById('thresholdInput').value);
-            if (!isNaN(value)) {
-                threshold = value;
-                drawChart();
+        // Update the threshold line
+        function updateThresholdLine() {
+            const thresholdInput = document.getElementById('thresholdInput').value;
+            const thresholdValue = parseFloat(thresholdInput);
+            
+            if (!isNaN(thresholdValue)) {
+                threshold = thresholdValue;
+                
+                chart.updateOptions({
+                    annotations: {
+                        yaxis: [{
+                            y: threshold,
+                            borderColor: '#FF4560',
+                            label: {
+                                borderColor: '#FF4560',
+                                style: {
+                                    color: '#fff',
+                                    background: '#FF4560'
+                                },
+                                text: `Threshold: ${threshold.toFixed(2)}°C`
+                            }
+                        }]
+                    }
+                });
             } else {
-                alert('Please enter a valid number for the threshold.');
+                // Clear threshold if input is empty
+                chart.updateOptions({
+                    annotations: {
+                        yaxis: []
+                    }
+                });
+                threshold = null;
             }
         }
-    </script>
-</head>
-<body>
-    <div class="container">
-        <h1>Temperature Monitoring Dashboard</h1>
 
-        <!-- Controls Section -->
-        <div class="controls">
-            <div class="controls-left">
-                <label>
-                    <input type="checkbox" id="phaseR" checked onchange="updateChart()"> Phase R
-                </label>
-                <label>
-                    <input type="checkbox" id="phaseY" checked onchange="updateChart()"> Phase Y
-                </label>
-                <label>
-                    <input type="checkbox" id="phaseB" checked onchange="updateChart()"> Phase B
-                </label>
-            </div>
-            <div class="controls-right">
-                <label for="startDate">Start Date:</label>
-                <input type="date" id="startDate">
-                <label for="endDate">End Date:</label>
-                <input type="date" id="endDate">
-                <button onclick="applyDateRange()">Apply Date Range</button>
+        // Update real-time temperature display
+        function updateRealTimeTemperatures() {
+            if (chartData.length === 0) return;
+            
+            const latestData = chartData[chartData.length - 1];
+            document.getElementById('tempR').textContent = latestData.phaseR !== null ? latestData.phaseR.toFixed(2) : 'N/A';
+            document.getElementById('tempY').textContent = latestData.phaseY !== null ? latestData.phaseY.toFixed(2) : 'N/A';
+            document.getElementById('tempB').textContent = latestData.phaseB !== null ? latestData.phaseB.toFixed(2) : 'N/A';
+        }
 
-                <label for="thresholdInput">Threshold (°C):</label>
-                <input type="number" id="thresholdInput" placeholder="e.g., 50">
-                <button onclick="setThreshold()">Set Threshold</button>
-            </div>
-        </div>
-
-        <!-- Chart Section -->
-        <div id="chart_div"></div>
-
-        <!-- Real-Time Temperature Display -->
-        <div class="real-time-data">
-            <div>
-                <span id="tempR">N/A</span>
-                <small>Phase R (°C)</small>
-            </div>
-            <div>
-                <span id="tempY">N/A</span>
-                <small>Phase Y (°C)</small>
-            </div>
-            <div>
-                <span id="tempB">N/A</span>
-                <small>Phase B (°C)</small>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        // Refresh data every 30 seconds
-        setInterval(fetchData, 30000);
+        // Initialize the dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            // Set default date to today
+            const today = new Date();
+            const formattedDate = formatDateForInput(today);
+            document.getElementById('dateFilter').value = formattedDate;
+            
+            initChart();
+            fetchData();
+            
+            // Setup event listeners
+            document.getElementById('phaseR').addEventListener('change', updateChart);
+            document.getElementById('phaseY').addEventListener('change', updateChart);
+            document.getElementById('phaseB').addEventListener('change', updateChart);
+            document.getElementById('dateFilter').addEventListener('change', updateChart);
+            document.getElementById('thresholdInput').addEventListener('input', updateThresholdLine);
+            
+            // Refresh data every 30 seconds
+            setInterval(fetchData, 30000);
+        });
     </script>
 </body>
 </html>
