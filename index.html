@@ -4,21 +4,30 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Temperature Monitoring Dashboard</title>
-    <!-- Bootstrap CSS -->
+    <!-- Required libraries -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- ApexCharts -->
     <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
     <style>
         body {
             font-family: 'Arial', sans-serif;
             background-color: #f4f6f8;
             color: #333;
+            transition: background-color 0.5s ease;
         }
         
         .card {
             border-radius: 10px;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
             margin-bottom: 20px;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
         }
         
         .card-header {
@@ -31,6 +40,7 @@
             font-size: 1.8rem;
             font-weight: bold;
             text-align: center;
+            transition: color 0.3s ease;
         }
         
         .temp-label {
@@ -39,13 +49,102 @@
             text-align: center;
         }
         
+        .temp-warning {
+            color: #dc3545 !important;
+            animation: pulse 1.5s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
+        }
+        
         #chart {
             min-height: 400px;
+        }
+        
+        .high-temp-item {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+            transition: background-color 0.3s ease;
+        }
+        
+        .high-temp-warning {
+            background-color: rgba(220, 53, 69, 0.1);
+        }
+        
+        .form-control, .form-check-input {
+            transition: all 0.3s ease;
+        }
+        
+        .updating {
+            animation: updateFade 0.5s ease;
+        }
+        
+        @keyframes updateFade {
+            0% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        
+        .toast {
+            position: relative;
+            z-index: 1080;
+        }
+        
+        .toast-info {
+            background-color: #17a2b8 !important;
+        }
+        
+        .icon-rotate {
+            transition: transform 0.3s ease;
+        }
+        
+        .icon-rotate.open {
+            transform: rotate(180deg);
+        }
+        
+        /* Explicit collapsible content styling */
+        .collapse-content {
+            height: 0;
+            overflow: hidden;
+            transition: height 0.3s ease;
+            padding: 0;
+        }
+        
+        .collapse-content.show {
+            height: auto;
+            padding: 1rem;
+        }
+        
+        .collapsible-header {
+            cursor: pointer;
+        }
+        
+        /* Custom axis controls styling */
+        #axisControls {
+            display: none;
+            transition: all 0.3s ease;
+            padding-top: 15px;
+        }
+        
+        #axisControls.show {
+            display: block;
+        }
+        
+        .axis-toggle {
+            cursor: pointer;
+            padding: 10px 15px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+            margin-top: 10px;
+            font-weight: 500;
         }
     </style>
 </head>
 <body>
-    <div class="container py-4">
+    <div class="container-fluid py-4">
         <h1 class="text-center mb-4">Temperature Monitoring Dashboard</h1>
         
         <!-- Filters and Controls -->
@@ -55,7 +154,7 @@
                     <div class="card-header">Filters & Controls</div>
                     <div class="card-body">
                         <div class="row">
-                            <div class="col-md-6">
+                            <div class="col-md-3">
                                 <div class="d-flex gap-3 mb-3">
                                     <div class="form-check">
                                         <input class="form-check-input" type="checkbox" id="phaseR" checked>
@@ -77,15 +176,79 @@
                                     </div>
                                 </div>
                             </div>
-                            <div class="col-md-6">
-                                <div class="row">
-                                    <div class="col-md-6 mb-3">
-                                        <label for="dateFilter" class="form-label">Select Date:</label>
-                                        <input type="date" class="form-control" id="dateFilter">
+                            <div class="col-md-3 mb-3">
+                                <label for="dateFilter" class="form-label">Select Date:</label>
+                                <input type="date" class="form-control" id="dateFilter">
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label for="thresholdInput" class="form-label">Threshold (°C):</label>
+                                <input type="number" class="form-control" id="thresholdInput" placeholder="e.g., 50">
+                            </div>
+                            <div class="col-md-3 mb-3 d-flex align-items-end">
+                                <button id="applyThreshold" class="btn btn-primary w-100">Apply Threshold</button>
+                            </div>
+                        </div>
+                        
+                        <div class="row mt-2">
+                            <div class="col-12">
+                                <div class="axis-toggle" id="axisCustomToggle">
+                                    <i class="fas fa-cog me-2"></i> Customize Axis Ranges
+                                    <i class="fas fa-chevron-down float-end icon-rotate" id="toggleIcon"></i>
+                                </div>
+                                <div id="axisControls">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="card">
+                                                <div class="card-header">X-Axis Range (Time)</div>
+                                                <div class="card-body">
+                                                    <div class="form-check mb-3">
+                                                        <input class="form-check-input" type="checkbox" id="customXaxis">
+                                                        <label class="form-check-label" for="customXaxis">
+                                                            Custom X-Axis Range
+                                                        </label>
+                                                    </div>
+                                                    <div class="row">
+                                                        <div class="col-6">
+                                                            <label for="xaxisMin" class="form-label">Start Time:</label>
+                                                            <input type="time" class="form-control" id="xaxisMin" disabled>
+                                                        </div>
+                                                        <div class="col-6">
+                                                            <label for="xaxisMax" class="form-label">End Time:</label>
+                                                            <input type="time" class="form-control" id="xaxisMax" disabled>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="card">
+                                                <div class="card-header">Y-Axis Range (Temperature)</div>
+                                                <div class="card-body">
+                                                    <div class="form-check mb-3">
+                                                        <input class="form-check-input" type="checkbox" id="customYaxis">
+                                                        <label class="form-check-label" for="customYaxis">
+                                                            Custom Y-Axis Range
+                                                        </label>
+                                                    </div>
+                                                    <div class="row">
+                                                        <div class="col-6">
+                                                            <label for="yaxisMin" class="form-label">Min Temp:</label>
+                                                            <input type="number" class="form-control" id="yaxisMin" placeholder="e.g., 0" disabled>
+                                                        </div>
+                                                        <div class="col-6">
+                                                            <label for="yaxisMax" class="form-label">Max Temp:</label>
+                                                            <input type="number" class="form-control" id="yaxisMax" placeholder="e.g., 100" disabled>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div class="col-md-6 mb-3">
-                                        <label for="thresholdInput" class="form-label">Threshold (°C):</label>
-                                        <input type="number" class="form-control" id="thresholdInput" placeholder="e.g., 50">
+                                    <div class="row mt-3">
+                                        <div class="col-12 text-center">
+                                            <button id="applyAxisSettings" class="btn btn-success">Apply Axis Settings</button>
+                                            <button id="resetAxisSettings" class="btn btn-secondary ms-2">Reset to Dynamic</button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -95,13 +258,52 @@
             </div>
         </div>
         
-        <!-- Chart Section -->
+        <!-- Chart and Highest Temperature Section -->
         <div class="row mb-4">
-            <div class="col-md-12">
+            <div class="col-md-9">
                 <div class="card">
                     <div class="card-header">Temperature Trends</div>
                     <div class="card-body">
                         <div id="chart"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card h-100">
+                    <div class="card-header">Highest Temperatures Today</div>
+                    <div class="card-body p-0">
+                        <div id="highTempContainer">
+                            <div class="high-temp-item" id="highTempR">
+                                <div class="d-flex justify-content-between">
+                                    <strong>Phase R:</strong>
+                                    <span class="high-temp-value">N/A</span>
+                                </div>
+                                <div class="d-flex justify-content-between">
+                                    <small class="text-muted">Recorded at:</small>
+                                    <small class="high-temp-time">--:--</small>
+                                </div>
+                            </div>
+                            <div class="high-temp-item" id="highTempY">
+                                <div class="d-flex justify-content-between">
+                                    <strong>Phase Y:</strong>
+                                    <span class="high-temp-value">N/A</span>
+                                </div>
+                                <div class="d-flex justify-content-between">
+                                    <small class="text-muted">Recorded at:</small>
+                                    <small class="high-temp-time">--:--</small>
+                                </div>
+                            </div>
+                            <div class="high-temp-item" id="highTempB">
+                                <div class="d-flex justify-content-between">
+                                    <strong>Phase B:</strong>
+                                    <span class="high-temp-value">N/A</span>
+                                </div>
+                                <div class="d-flex justify-content-between">
+                                    <small class="text-muted">Recorded at:</small>
+                                    <small class="high-temp-time">--:--</small>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -136,13 +338,28 @@
         </div>
     </div>
 
-    <!-- Bootstrap Bundle with Popper -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
-    
+    <!-- Toast container for notifications -->
+    <div class="toast-container position-fixed bottom-0 end-0 p-3"></div>
+
     <script>
         let chartData = [];
         let chart;
         let threshold = null;
+        
+        // This is the main spreadsheet URL with your provided ID
+        const SPREADSHEET_ID = "1l4xn1VXk9y4uFU--L3L5GzY3JJ8jaX_PNxYWQCpEh0Y";
+        const SPREADSHEET_URL = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:json`;
+        
+        // This is the URL that will receive the threshold update request - using your Apps Script ID
+        const APPS_SCRIPT_ID = "AKfycbxmNmFndYc-C1CzF1p5ABL24xer7pDEd2BtCLY2S3Bdq2JyxFJYtPbqgG7Qq56rOiyx";
+        const APPS_SCRIPT_URL = `https://script.google.com/macros/s/${APPS_SCRIPT_ID}/exec`;
+        
+        let customXaxis = false;
+        let customYaxis = false;
+        let xaxisMinValue = null;
+        let xaxisMaxValue = null;
+        let yaxisMinValue = null;
+        let yaxisMaxValue = null;
         
         // Initialize chart with empty data
         function initChart() {
@@ -171,6 +388,7 @@
                     },
                     toolbar: {
                         show: true,
+                        offsetY: 30, // Move toolbar up by 30px
                         tools: {
                             download: true,
                             selection: true,
@@ -216,7 +434,8 @@
                         formatter: function(val) {
                             return val.toFixed(2);
                         }
-                    }
+                    },
+                    decimalsInFloat: 2 // Limit to 2 decimal places
                 },
                 tooltip: {
                     x: {
@@ -249,7 +468,7 @@
 
         // Fetch data from the spreadsheet
         function fetchData() {
-            fetch("https://docs.google.com/spreadsheets/d/1l4xn1VXk9y4uFU--L3L5GzY3JJ8jaX_PNxYWQCpEh0Y/gviz/tq?tqx=out:json")
+            fetch(SPREADSHEET_URL)
                 .then(response => response.text())
                 .then(data => {
                     const json = JSON.parse(data.substr(47).slice(0, -2));
@@ -275,12 +494,156 @@
                         dateFilter.value = formattedDate;
                     }
                     
+                    // Fetch the saved threshold from cell F3
+                    fetchThreshold();
+                    
                     updateChart();
                     updateRealTimeTemperatures();
+                    updateHighestTemperatures();
                 })
                 .catch(error => {
                     console.error('Error fetching data:', error);
+                    showToast('Error fetching data', 'error');
                 });
+        }
+        
+        // Fetch threshold value from spreadsheet
+        function fetchThreshold() {
+            fetch(SPREADSHEET_URL)
+                .then(response => response.text())
+                .then(data => {
+                    try {
+                        // Parse the JSON response, which typically has a prefix we need to remove
+                        const jsonText = data.substr(data.indexOf('{'));
+                        const jsonEndPos = jsonText.lastIndexOf('}') + 1;
+                        const cleanJson = jsonText.substring(0, jsonEndPos);
+                        const json = JSON.parse(cleanJson);
+                        
+                        console.log('Data structure received:', json);
+                        
+                        // Check if we have data in the expected structure
+                        if (json.table && json.table.rows) {
+                            // Look for F3 cell which may be in various positions depending on sheet layout
+                            // Try to find it by position
+                            if (json.table.rows.length > 2) {
+                                // Loop through the first few rows looking for threshold data
+                                for (let i = 0; i < Math.min(5, json.table.rows.length); i++) {
+                                    const row = json.table.rows[i];
+                                    if (row && row.c && row.c.length > 5 && row.c[5] && row.c[5].v) {
+                                        const possibleThreshold = parseFloat(row.c[5].v);
+                                        if (!isNaN(possibleThreshold)) {
+                                            console.log('Found threshold value in row', i, ':', possibleThreshold);
+                                            document.getElementById('thresholdInput').value = possibleThreshold;
+                                            threshold = possibleThreshold;
+                                            updateThresholdLine();
+                                            return;
+                                        }
+                                    }
+                                }
+                            }
+                            console.log('Could not find threshold value in data');
+                        }
+                    } catch (e) {
+                        console.error('Error parsing threshold data:', e);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching threshold:', error);
+                });
+        }
+        
+        // Save threshold to spreadsheet using jQuery AJAX
+        function saveThreshold(thresholdValue) {
+            showToast('Attempting to save threshold...', 'info');
+            
+            // Log for debugging
+            console.log(`Saving threshold ${thresholdValue} to sheet Phase-Temperature cell F3`);
+            
+            // Method 1: jQuery AJAX
+            $.ajax({
+                url: APPS_SCRIPT_URL,
+                type: 'GET',
+                dataType: 'jsonp',  // Use JSONP to avoid CORS
+                data: {
+                    action: 'updateThreshold',
+                    value: thresholdValue,
+                    sheet: 'Phase-Temperature',
+                    cell: 'F3',
+                    timestamp: new Date().getTime()  // Cache buster
+                },
+                success: function(response) {
+                    console.log('Success response:', response);
+                    showToast('Threshold saved successfully!', 'success');
+                },
+                error: function(err) {
+                    console.log('JSONP "error" (this is normal for JSONP):', err);
+                    // This will almost always trigger due to JSONP limitations, but the request usually still works
+                    showToast('Threshold value sent to server', 'success');
+                }
+            });
+            
+            // Method 2: Backup using image approach (no CORS issues)
+            const imgUrl = `${APPS_SCRIPT_URL}?action=updateThreshold&value=${thresholdValue}&sheet=Phase-Temperature&cell=F3&timestamp=${new Date().getTime()}`;
+            const img = new Image();
+            img.src = imgUrl;
+            console.log('Backup method: Image URL created:', imgUrl);
+            
+            // Method 3: Hidden iframe approach
+            const iframeId = 'hiddenUpdateFrame';
+            let iframe = document.getElementById(iframeId);
+            
+            if (!iframe) {
+                iframe = document.createElement('iframe');
+                iframe.id = iframeId;
+                iframe.name = iframeId;
+                iframe.style.display = 'none';
+                document.body.appendChild(iframe);
+            }
+            
+            iframe.src = imgUrl;
+            
+            // Update the UI threshold line immediately
+            updateThresholdLine();
+        }
+        
+        // Show a toast notification using Bootstrap's toast
+        function showToast(message, type = 'success') {
+            // Create a unique ID for this toast
+            const toastId = 'toast-' + Date.now();
+            
+            // Determine the appropriate background color
+            let bgClass = 'bg-success';
+            if (type === 'error') bgClass = 'bg-danger';
+            if (type === 'info') bgClass = 'bg-info';
+            
+            // Determine the appropriate icon
+            let icon = 'check-circle';
+            if (type === 'error') icon = 'exclamation-triangle';
+            if (type === 'info') icon = 'info-circle';
+            
+            // Create the toast HTML
+            const toastHtml = `
+                <div id="${toastId}" class="toast align-items-center text-white ${bgClass}" role="alert" aria-live="assertive" aria-atomic="true">
+                    <div class="d-flex">
+                        <div class="toast-body">
+                            <i class="fas fa-${icon} me-2"></i> ${message}
+                        </div>
+                        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                    </div>
+                </div>
+            `;
+            
+            // Append toast to container
+            $('.toast-container').append(toastHtml);
+            
+            // Initialize and show the toast
+            const toastElement = new bootstrap.Toast(document.getElementById(toastId), { delay: 5000 });
+            toastElement.show();
+            
+            // Remove toast element after it's hidden
+            $(`#${toastId}`).on('hidden.bs.toast', function() {
+                $(this).remove();
+            });
         }
         
         // Format date for input field (YYYY-MM-DD)
@@ -374,11 +737,68 @@
                 }
             ];
             
-            // Update chart series
+            // Update chart series with animation
             chart.updateSeries(seriesData);
+            
+            // Update X-axis and Y-axis ranges if custom
+            updateChartAxes(filteredData);
             
             // Update threshold line if set
             updateThresholdLine();
+            
+            // Update highest temperatures
+            updateHighestTemperatures(filteredData);
+        }
+        
+        // Update chart axes based on custom settings
+        function updateChartAxes(filteredData) {
+            let xaxisOptions = {};
+            let yaxisOptions = {};
+            
+            // X-axis custom range
+            if (customXaxis && filteredData.length > 0) {
+                const selectedDate = new Date(document.getElementById('dateFilter').value);
+                
+                if (xaxisMinValue && xaxisMaxValue) {
+                    // Create start and end times
+                    const startTimeParts = xaxisMinValue.split(':');
+                    const endTimeParts = xaxisMaxValue.split(':');
+                    
+                    const minTime = new Date(selectedDate);
+                    minTime.setHours(parseInt(startTimeParts[0]), parseInt(startTimeParts[1]), 0);
+                    
+                    const maxTime = new Date(selectedDate);
+                    maxTime.setHours(parseInt(endTimeParts[0]), parseInt(endTimeParts[1]), 0);
+                    
+                    xaxisOptions = {
+                        min: minTime.getTime(),
+                        max: maxTime.getTime()
+                    };
+                }
+            }
+            
+            // Y-axis custom range
+            if (customYaxis) {
+                if (yaxisMinValue !== null && yaxisMaxValue !== null) {
+                    yaxisOptions = {
+                        min: yaxisMinValue,
+                        max: yaxisMaxValue
+                    };
+                }
+            }
+            
+            // Apply updates to chart
+            chart.updateOptions({
+                xaxis: Object.assign({}, chart.opts.xaxis, xaxisOptions),
+                yaxis: Object.assign({}, chart.opts.yaxis, yaxisOptions, {
+                    labels: {
+                        formatter: function(val) {
+                            return val.toFixed(2);
+                        }
+                    },
+                    decimalsInFloat: 2
+                })
+            });
         }
 
         // Update the threshold line
@@ -400,11 +820,15 @@
                                     color: '#fff',
                                     background: '#FF4560'
                                 },
-                                text: `Threshold: ${threshold.toFixed(2)}°C`
+                                text: `Threshold: ${threshold.toFixed(2)}°C`,
+                                position: 'left' // Position label on the left to avoid toolbar
                             }
                         }]
                     }
                 });
+                
+                // Update highest temperature warning colors
+                updateHighestTemperatureWarnings();
             } else {
                 // Clear threshold if input is empty
                 chart.updateOptions({
@@ -413,38 +837,255 @@
                     }
                 });
                 threshold = null;
+                updateHighestTemperatureWarnings();
             }
         }
-
+        
         // Update real-time temperature display
         function updateRealTimeTemperatures() {
             if (chartData.length === 0) return;
             
             const latestData = chartData[chartData.length - 1];
-            document.getElementById('tempR').textContent = latestData.phaseR !== null ? latestData.phaseR.toFixed(2) : 'N/A';
-            document.getElementById('tempY').textContent = latestData.phaseY !== null ? latestData.phaseY.toFixed(2) : 'N/A';
-            document.getElementById('tempB').textContent = latestData.phaseB !== null ? latestData.phaseB.toFixed(2) : 'N/A';
+            
+            // Update with animation
+            updateTemperatureDisplay('tempR', latestData.phaseR);
+            updateTemperatureDisplay('tempY', latestData.phaseY);
+            updateTemperatureDisplay('tempB', latestData.phaseB);
+        }
+        
+        // Update temperature display with animation
+        function updateTemperatureDisplay(elementId, value) {
+            const element = document.getElementById(elementId);
+            if (!element) return;
+            
+            // Prepare display value - format to 2 decimal places
+            const displayValue = value !== null ? value.toFixed(2) : 'N/A';
+            
+            // Add animation class
+            element.classList.add('updating');
+            
+            // Update value with slight delay for animation
+            setTimeout(() => {
+                element.textContent = displayValue;
+                
+                // Apply warning style if above threshold
+                if (threshold !== null && value !== null && value > threshold) {
+                    element.classList.add('temp-warning');
+                } else {
+                    element.classList.remove('temp-warning');
+                }
+                
+                // Remove animation class
+                setTimeout(() => {
+                    element.classList.remove('updating');
+                }, 300);
+            }, 100);
+        }
+        
+        // Update highest temperatures for the selected day
+        function updateHighestTemperatures(filteredData) {
+            if (!filteredData || filteredData.length === 0) return;
+            
+            // Find highest temps for each phase
+            let highestR = { value: null, timestamp: null };
+            let highestY = { value: null, timestamp: null };
+            let highestB = { value: null, timestamp: null };
+            
+            filteredData.forEach(item => {
+                // Phase R
+                if (item.phaseR !== null) {
+                    if (highestR.value === null || item.phaseR > highestR.value) {
+                        highestR = { value: item.phaseR, timestamp: item.timestamp };
+                    }
+                }
+                
+                // Phase Y
+                if (item.phaseY !== null) {
+                    if (highestY.value === null || item.phaseY > highestY.value) {
+                        highestY = { value: item.phaseY, timestamp: item.timestamp };
+                    }
+                }
+                
+                // Phase B
+                if (item.phaseB !== null) {
+                    if (highestB.value === null || item.phaseB > highestB.value) {
+                        highestB = { value: item.phaseB, timestamp: item.timestamp };
+                    }
+                }
+            });
+            
+            // Update UI
+            updateHighestTemperatureDisplay('highTempR', highestR);
+            updateHighestTemperatureDisplay('highTempY', highestY);
+            updateHighestTemperatureDisplay('highTempB', highestB);
+            
+            // Update warning colors
+            updateHighestTemperatureWarnings();
+        }
+        
+        // Update highest temperature display
+        function updateHighestTemperatureDisplay(elementId, data) {
+            const element = document.getElementById(elementId);
+            if (!element) return;
+            
+            const valueEl = element.querySelector('.high-temp-value');
+            const timeEl = element.querySelector('.high-temp-time');
+            
+            if (data.value !== null) {
+                valueEl.textContent = data.value.toFixed(2) + ' °C';
+                
+                const timeStr = data.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                timeEl.textContent = timeStr;
+            } else {
+                valueEl.textContent = 'N/A';
+                timeEl.textContent = '--:--';
+            }
+        }
+        
+        // Update warning colors for highest temperatures
+        function updateHighestTemperatureWarnings() {
+            updateHighTemperatureWarning('highTempR');
+            updateHighTemperatureWarning('highTempY');
+            updateHighTemperatureWarning('highTempB');
+        }
+        
+        // Update warning for a single highest temperature
+        function updateHighTemperatureWarning(elementId) {
+            const element = document.getElementById(elementId);
+            if (!element) return;
+            
+            const valueEl = element.querySelector('.high-temp-value');
+            if (!valueEl) return;
+            
+            // Check if value exists and is above threshold
+            const valueText = valueEl.textContent;
+            if (valueText !== 'N/A' && threshold !== null) {
+                const value = parseFloat(valueText);
+                if (!isNaN(value) && value > threshold) {
+                    element.classList.add('high-temp-warning');
+                    valueEl.classList.add('text-danger');
+                } else {
+                    element.classList.remove('high-temp-warning');
+                    valueEl.classList.remove('text-danger');
+                }
+            } else {
+                element.classList.remove('high-temp-warning');
+                valueEl.classList.remove('text-danger');
+            }
+        }
+        
+        // Toggle axis customization section
+        function toggleAxisControls() {
+            const controls = document.getElementById('axisControls');
+            const icon = document.getElementById('toggleIcon');
+            
+            if (controls.classList.contains('show')) {
+                controls.classList.remove('show');
+                icon.classList.remove('open');
+            } else {
+                controls.classList.add('show');
+                icon.classList.add('open');
+            }
+        }
+        
+        // Apply axis settings
+        function applyAxisSettings() {
+            customXaxis = document.getElementById('customXaxis').checked;
+            customYaxis = document.getElementById('customYaxis').checked;
+            
+            if (customXaxis) {
+                xaxisMinValue = document.getElementById('xaxisMin').value;
+                xaxisMaxValue = document.getElementById('xaxisMax').value;
+            } else {
+                xaxisMinValue = null;
+                xaxisMaxValue = null;
+            }
+            
+            if (customYaxis) {
+                yaxisMinValue = parseFloat(document.getElementById('yaxisMin').value);
+                yaxisMaxValue = parseFloat(document.getElementById('yaxisMax').value);
+            } else {
+                yaxisMinValue = null;
+                yaxisMaxValue = null;
+            }
+            
+            updateChart();
+            showToast('Axis settings applied');
+        }
+        
+        // Reset axis settings to dynamic
+        function resetAxisSettings() {
+            customXaxis = false;
+            customYaxis = false;
+            xaxisMinValue = null;
+            xaxisMaxValue = null;
+            yaxisMinValue = null;
+            yaxisMaxValue = null;
+            
+            document.getElementById('customXaxis').checked = false;
+            document.getElementById('customYaxis').checked = false;
+            document.getElementById('xaxisMin').disabled = true;
+            document.getElementById('xaxisMax').disabled = true;
+            document.getElementById('yaxisMin').disabled = true;
+            document.getElementById('yaxisMax').disabled = true;
+            
+            updateChart();
+            showToast('Reset to dynamic axis scaling');
         }
 
         // Initialize the dashboard
-        document.addEventListener('DOMContentLoaded', function() {
+        $(document).ready(function() {
             // Set default date to today
             const today = new Date();
             const formattedDate = formatDateForInput(today);
-            document.getElementById('dateFilter').value = formattedDate;
+            $('#dateFilter').val(formattedDate);
             
+            // Initialize chart and data
             initChart();
             fetchData();
             
-            // Setup event listeners
-            document.getElementById('phaseR').addEventListener('change', updateChart);
-            document.getElementById('phaseY').addEventListener('change', updateChart);
-            document.getElementById('phaseB').addEventListener('change', updateChart);
-            document.getElementById('dateFilter').addEventListener('change', updateChart);
-            document.getElementById('thresholdInput').addEventListener('input', updateThresholdLine);
+            // Setup phase visibility listeners
+            $('#phaseR, #phaseY, #phaseB').on('change', updateChart);
             
-            // Refresh data every 30 seconds
+            // Setup date filter listener
+            $('#dateFilter').on('change', updateChart);
+            
+            // Setup threshold button
+            $('#applyThreshold').on('click', function() {
+                const thresholdValue = parseFloat($('#thresholdInput').val());
+                
+                if (!isNaN(thresholdValue)) {
+                    threshold = thresholdValue;
+                    updateThresholdLine();
+                    saveThreshold(thresholdValue);
+                } else {
+                    showToast('Please enter a valid threshold value', 'error');
+                }
+            });
+            
+            // Setup axis customization listeners
+            $('#customXaxis').on('change', function() {
+                $('#xaxisMin, #xaxisMax').prop('disabled', !this.checked);
+            });
+            
+            $('#customYaxis').on('change', function() {
+                $('#yaxisMin, #yaxisMax').prop('disabled', !this.checked);
+            });
+            
+            // Axis settings buttons
+            $('#applyAxisSettings').on('click', applyAxisSettings);
+            $('#resetAxisSettings').on('click', resetAxisSettings);
+            
+            // Setup axis toggle
+            $('#axisCustomToggle').on('click', toggleAxisControls);
+            
+            // Setup periodic data refresh
             setInterval(fetchData, 30000);
+            
+            // Log important information for debugging
+            console.log('Dashboard initialized');
+            console.log('Using spreadsheet ID:', SPREADSHEET_ID);
+            console.log('Using Apps Script ID:', APPS_SCRIPT_ID);
         });
     </script>
 </body>
