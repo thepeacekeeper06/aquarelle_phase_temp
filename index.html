@@ -4,12 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Temperature Monitoring Dashboard</title>
-    <!-- Required libraries -->
+    <!-- Preload critical resources -->
+    <link rel="preload" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" as="style">
+    <link rel="preload" href="https://cdn.jsdelivr.net/npm/apexcharts" as="script">
+    
+    <!-- Load CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
-    <script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    
     <style>
         body {
             font-family: 'Arial', sans-serif;
@@ -341,6 +342,10 @@
     <!-- Toast container for notifications -->
     <div class="toast-container position-fixed bottom-0 end-0 p-3"></div>
 
+    <!-- Load scripts in optimal order -->
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+    <script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
+    
     <script>
         let chartData = [];
         let chart;
@@ -361,7 +366,102 @@
         let yaxisMinValue = null;
         let yaxisMaxValue = null;
         
-        // Initialize chart with empty data
+        // Calculate average of an array
+        function calculateAverage(arr) {
+            if (arr.length === 0) return null;
+            const sum = arr.reduce((acc, val) => acc + val, 0);
+            return sum / arr.length;
+        }
+        
+        // Format date for input field (YYYY-MM-DD)
+        function formatDateForInput(date) {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        }
+        
+        // Process data into 10-minute intervals - optimized version
+        function processDataBy10MinIntervals(data) {
+            const intervalMap = new Map();
+            
+            for (let i = 0; i < data.length; i++) {
+                const item = data[i];
+                // Round to the nearest 10-minute interval
+                const date = new Date(item.timestamp);
+                date.setMinutes(Math.floor(date.getMinutes() / 10) * 10);
+                date.setSeconds(0);
+                date.setMilliseconds(0);
+                
+                const key = date.getTime();
+                
+                if (!intervalMap.has(key)) {
+                    intervalMap.set(key, {
+                        timestamp: date,
+                        phaseR: [],
+                        phaseY: [],
+                        phaseB: []
+                    });
+                }
+                
+                const interval = intervalMap.get(key);
+                if (item.phaseR !== null) interval.phaseR.push(item.phaseR);
+                if (item.phaseY !== null) interval.phaseY.push(item.phaseY);
+                if (item.phaseB !== null) interval.phaseB.push(item.phaseB);
+            }
+            
+            // Convert map to array and calculate averages
+            return Array.from(intervalMap.values())
+                .map(interval => ({
+                    timestamp: interval.timestamp,
+                    phaseR: calculateAverage(interval.phaseR),
+                    phaseY: calculateAverage(interval.phaseY),
+                    phaseB: calculateAverage(interval.phaseB)
+                }))
+                .sort((a, b) => a.timestamp - b.timestamp);
+        }
+        
+        // Show a toast notification using a simpler implementation
+        function showToast(message, type = 'success') {
+            // Create a unique ID for this toast
+            const toastId = 'toast-' + Date.now();
+            
+            // Determine the appropriate background color
+            let bgClass = 'bg-success';
+            if (type === 'error') bgClass = 'bg-danger';
+            if (type === 'info') bgClass = 'bg-info';
+            
+            // Determine the appropriate icon
+            let icon = 'check-circle';
+            if (type === 'error') icon = 'exclamation-triangle';
+            if (type === 'info') icon = 'info-circle';
+            
+            // Create the toast HTML
+            const toastHtml = `
+                <div id="${toastId}" class="toast align-items-center text-white ${bgClass}" role="alert" aria-live="assertive" aria-atomic="true">
+                    <div class="d-flex">
+                        <div class="toast-body">
+                            <i class="fas fa-${icon} me-2"></i> ${message}
+                        </div>
+                        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                    </div>
+                </div>
+            `;
+            
+            // Append toast to container
+            document.querySelector('.toast-container').insertAdjacentHTML('beforeend', toastHtml);
+            
+            // Create and show the toast, then remove after 5 seconds
+            const toastEl = document.getElementById(toastId);
+            toastEl.classList.add('show');
+            
+            setTimeout(() => {
+                toastEl.classList.remove('show');
+                setTimeout(() => toastEl.remove(), 300);
+            }, 5000);
+        }
+        
+        // Initialize chart with empty data - optimized
         function initChart() {
             const options = {
                 series: [
@@ -377,10 +477,6 @@
                         enabled: true,
                         easing: 'easeinout',
                         speed: 800,
-                        animateGradually: {
-                            enabled: true,
-                            delay: 150
-                        },
                         dynamicAnimation: {
                             enabled: true,
                             speed: 350
@@ -388,7 +484,7 @@
                     },
                     toolbar: {
                         show: true,
-                        offsetY: 30, // Move toolbar up by 30px
+                        offsetY: 30,
                         tools: {
                             download: true,
                             selection: true,
@@ -435,7 +531,7 @@
                             return val.toFixed(2);
                         }
                     },
-                    decimalsInFloat: 2 // Limit to 2 decimal places
+                    decimalsInFloat: 2
                 },
                 tooltip: {
                     x: {
@@ -465,241 +561,133 @@
             chart = new ApexCharts(document.querySelector("#chart"), options);
             chart.render();
         }
+        
+        // Optimized JSON parsing
+        function parseSpreadsheetResponse(responseText) {
+            // Extract the JSON part from the response
+            const jsonStart = responseText.indexOf('{');
+            const jsonEnd = responseText.lastIndexOf('}') + 1;
+            if (jsonStart < 0 || jsonEnd <= 0) {
+                throw new Error('Invalid response format');
+            }
+            
+            return JSON.parse(responseText.substring(jsonStart, jsonEnd));
+        }
 
-        // Fetch data from the spreadsheet
-        function fetchData() {
-            fetch(SPREADSHEET_URL)
+        // Process spreadsheet data efficiently
+        function processSpreadsheetData(json) {
+            if (!json.table || !json.table.rows) return [];
+            
+            return json.table.rows.map(row => ({
+                timestamp: new Date(row.c[0].v),
+                phaseR: row.c[1]?.v ?? null,
+                phaseY: row.c[2]?.v ?? null,
+                phaseB: row.c[3]?.v ?? null
+            }));
+        }
+
+        // Fetch data from the spreadsheet - optimized with a single fetch
+        function fetchDataAndThreshold() {
+            return fetch(SPREADSHEET_URL)
                 .then(response => response.text())
                 .then(data => {
-                    const json = JSON.parse(data.substr(47).slice(0, -2));
-                    
-                    // Process the data
-                    chartData = json.table.rows.map(row => {
-                        return {
-                            timestamp: new Date(row.c[0].v),
-                            phaseR: row.c[1].v,
-                            phaseY: row.c[2].v,
-                            phaseB: row.c[3].v
-                        };
-                    });
-                    
-                    // Group data by 10-minute intervals
-                    chartData = processDataBy10MinIntervals(chartData);
-                    
-                    // Set the date filter to today if it's not already set
-                    const dateFilter = document.getElementById('dateFilter');
-                    if (!dateFilter.value) {
-                        const today = new Date();
-                        const formattedDate = formatDateForInput(today);
-                        dateFilter.value = formattedDate;
+                    try {
+                        const json = parseSpreadsheetResponse(data);
+                        
+                        // Process data for chart
+                        const rawData = processSpreadsheetData(json);
+                        chartData = processDataBy10MinIntervals(rawData);
+                        
+                        // Set the date filter to today if it's not already set
+                        const dateFilter = document.getElementById('dateFilter');
+                        if (!dateFilter.value) {
+                            dateFilter.value = formatDateForInput(new Date());
+                        }
+                        
+                        // Look for threshold in the first few rows
+                        if (json.table && json.table.rows) {
+                            for (let i = 0; i < Math.min(5, json.table.rows.length); i++) {
+                                const row = json.table.rows[i];
+                                if (row && row.c && row.c.length > 5 && row.c[5] && row.c[5].v) {
+                                    const possibleThreshold = parseFloat(row.c[5].v);
+                                    if (!isNaN(possibleThreshold)) {
+                                        document.getElementById('thresholdInput').value = possibleThreshold;
+                                        threshold = possibleThreshold;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Get the latest data point for real-time display
+                        if (rawData.length > 0) {
+                            const latest = rawData[rawData.length - 1];
+                            updateTemperatureDisplay('tempR', latest.phaseR);
+                            updateTemperatureDisplay('tempY', latest.phaseY);
+                            updateTemperatureDisplay('tempB', latest.phaseB);
+                        }
+                        
+                        // Update chart
+                        updateChart();
+                        
+                        // Explicitly update highest temperatures using raw data
+                        updateHighestTemperaturesFromData(rawData);
+                        
+                        return json; // Return for potential further use
+                    } catch (e) {
+                        console.error('Error processing data:', e);
+                        showToast('Error processing data', 'error');
+                        throw e;
                     }
-                    
-                    // Fetch the saved threshold from cell F3
-                    fetchThreshold();
-                    
-                    updateChart();
-                    updateRealTimeTemperatures();
-                    updateHighestTemperatures();
                 })
                 .catch(error => {
                     console.error('Error fetching data:', error);
                     showToast('Error fetching data', 'error');
                 });
         }
-        
-        // Fetch threshold value from spreadsheet
-        function fetchThreshold() {
-            fetch(SPREADSHEET_URL)
-                .then(response => response.text())
-                .then(data => {
-                    try {
-                        // Parse the JSON response, which typically has a prefix we need to remove
-                        const jsonText = data.substr(data.indexOf('{'));
-                        const jsonEndPos = jsonText.lastIndexOf('}') + 1;
-                        const cleanJson = jsonText.substring(0, jsonEndPos);
-                        const json = JSON.parse(cleanJson);
-                        
-                        console.log('Data structure received:', json);
-                        
-                        // Check if we have data in the expected structure
-                        if (json.table && json.table.rows) {
-                            // Look for F3 cell which may be in various positions depending on sheet layout
-                            // Try to find it by position
-                            if (json.table.rows.length > 2) {
-                                // Loop through the first few rows looking for threshold data
-                                for (let i = 0; i < Math.min(5, json.table.rows.length); i++) {
-                                    const row = json.table.rows[i];
-                                    if (row && row.c && row.c.length > 5 && row.c[5] && row.c[5].v) {
-                                        const possibleThreshold = parseFloat(row.c[5].v);
-                                        if (!isNaN(possibleThreshold)) {
-                                            console.log('Found threshold value in row', i, ':', possibleThreshold);
-                                            document.getElementById('thresholdInput').value = possibleThreshold;
-                                            threshold = possibleThreshold;
-                                            updateThresholdLine();
-                                            return;
-                                        }
-                                    }
-                                }
-                            }
-                            console.log('Could not find threshold value in data');
-                        }
-                    } catch (e) {
-                        console.error('Error parsing threshold data:', e);
-                    }
-                })
-                .catch(error => {
-                    console.error('Error fetching threshold:', error);
-                });
-        }
-        
-        // Save threshold to spreadsheet using jQuery AJAX
+
+        // Save threshold to spreadsheet - optimized
         function saveThreshold(thresholdValue) {
             showToast('Attempting to save threshold...', 'info');
             
-            // Log for debugging
-            console.log(`Saving threshold ${thresholdValue} to sheet Phase-Temperature cell F3`);
+            // Create a timestamp for cache busting
+            const timestamp = new Date().getTime();
+            const requestUrl = `${APPS_SCRIPT_URL}?action=updateThreshold&value=${thresholdValue}&sheet=Phase-Temperature&cell=F3&timestamp=${timestamp}`;
             
-            // Method 1: jQuery AJAX
-            $.ajax({
-                url: APPS_SCRIPT_URL,
-                type: 'GET',
-                dataType: 'jsonp',  // Use JSONP to avoid CORS
-                data: {
-                    action: 'updateThreshold',
-                    value: thresholdValue,
-                    sheet: 'Phase-Temperature',
-                    cell: 'F3',
-                    timestamp: new Date().getTime()  // Cache buster
-                },
-                success: function(response) {
-                    console.log('Success response:', response);
-                    showToast('Threshold saved successfully!', 'success');
-                },
-                error: function(err) {
-                    console.log('JSONP "error" (this is normal for JSONP):', err);
-                    // This will almost always trigger due to JSONP limitations, but the request usually still works
-                    showToast('Threshold value sent to server', 'success');
-                }
-            });
-            
-            // Method 2: Backup using image approach (no CORS issues)
-            const imgUrl = `${APPS_SCRIPT_URL}?action=updateThreshold&value=${thresholdValue}&sheet=Phase-Temperature&cell=F3&timestamp=${new Date().getTime()}`;
+            // Use Image approach (most reliable for cross-domain requests)
             const img = new Image();
-            img.src = imgUrl;
-            console.log('Backup method: Image URL created:', imgUrl);
-            
-            // Method 3: Hidden iframe approach
-            const iframeId = 'hiddenUpdateFrame';
-            let iframe = document.getElementById(iframeId);
-            
-            if (!iframe) {
-                iframe = document.createElement('iframe');
-                iframe.id = iframeId;
-                iframe.name = iframeId;
-                iframe.style.display = 'none';
-                document.body.appendChild(iframe);
-            }
-            
-            iframe.src = imgUrl;
+            img.onload = () => showToast('Threshold saved successfully!', 'success');
+            img.onerror = () => showToast('Threshold value sent to server', 'info');
+            img.src = requestUrl;
             
             // Update the UI threshold line immediately
             updateThresholdLine();
         }
         
-        // Show a toast notification using Bootstrap's toast
-        function showToast(message, type = 'success') {
-            // Create a unique ID for this toast
-            const toastId = 'toast-' + Date.now();
+        // Update temperature display with animation - optimized
+        function updateTemperatureDisplay(elementId, value) {
+            const element = document.getElementById(elementId);
+            if (!element) return;
             
-            // Determine the appropriate background color
-            let bgClass = 'bg-success';
-            if (type === 'error') bgClass = 'bg-danger';
-            if (type === 'info') bgClass = 'bg-info';
+            // Prepare display value
+            const displayValue = value !== null ? value.toFixed(2) : 'N/A';
             
-            // Determine the appropriate icon
-            let icon = 'check-circle';
-            if (type === 'error') icon = 'exclamation-triangle';
-            if (type === 'info') icon = 'info-circle';
+            // Add animation class and update
+            element.classList.add('updating');
+            element.textContent = displayValue;
             
-            // Create the toast HTML
-            const toastHtml = `
-                <div id="${toastId}" class="toast align-items-center text-white ${bgClass}" role="alert" aria-live="assertive" aria-atomic="true">
-                    <div class="d-flex">
-                        <div class="toast-body">
-                            <i class="fas fa-${icon} me-2"></i> ${message}
-                        </div>
-                        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
-                    </div>
-                </div>
-            `;
+            // Apply warning style
+            if (threshold !== null && value !== null && value > threshold) {
+                element.classList.add('temp-warning');
+            } else {
+                element.classList.remove('temp-warning');
+            }
             
-            // Append toast to container
-            $('.toast-container').append(toastHtml);
-            
-            // Initialize and show the toast
-            const toastElement = new bootstrap.Toast(document.getElementById(toastId), { delay: 5000 });
-            toastElement.show();
-            
-            // Remove toast element after it's hidden
-            $(`#${toastId}`).on('hidden.bs.toast', function() {
-                $(this).remove();
-            });
+            // Remove animation class
+            setTimeout(() => element.classList.remove('updating'), 400);
         }
         
-        // Format date for input field (YYYY-MM-DD)
-        function formatDateForInput(date) {
-            const year = date.getFullYear();
-            const month = String(date.getMonth() + 1).padStart(2, '0');
-            const day = String(date.getDate()).padStart(2, '0');
-            return `${year}-${month}-${day}`;
-        }
-
-        // Process data into 10-minute intervals
-        function processDataBy10MinIntervals(data) {
-            const intervalMap = new Map();
-            
-            data.forEach(item => {
-                // Round to the nearest 10-minute interval
-                const date = new Date(item.timestamp);
-                date.setMinutes(Math.floor(date.getMinutes() / 10) * 10);
-                date.setSeconds(0);
-                date.setMilliseconds(0);
-                
-                const key = date.getTime();
-                
-                if (!intervalMap.has(key)) {
-                    intervalMap.set(key, {
-                        timestamp: date,
-                        phaseR: [],
-                        phaseY: [],
-                        phaseB: []
-                    });
-                }
-                
-                intervalMap.get(key).phaseR.push(item.phaseR);
-                intervalMap.get(key).phaseY.push(item.phaseY);
-                intervalMap.get(key).phaseB.push(item.phaseB);
-            });
-            
-            // Calculate average for each interval
-            return Array.from(intervalMap.values()).map(interval => {
-                return {
-                    timestamp: interval.timestamp,
-                    phaseR: calculateAverage(interval.phaseR),
-                    phaseY: calculateAverage(interval.phaseY),
-                    phaseB: calculateAverage(interval.phaseB)
-                };
-            }).sort((a, b) => a.timestamp - b.timestamp);
-        }
-
-        // Calculate average of an array
-        function calculateAverage(arr) {
-            if (arr.length === 0) return null;
-            const sum = arr.reduce((acc, val) => acc + val, 0);
-            return sum / arr.length;
-        }
-
-        // Update the chart with the latest data
+        // Update the chart with the latest data - optimized
         function updateChart() {
             if (chartData.length === 0) return;
 
@@ -707,21 +695,25 @@
             const showPhaseY = document.getElementById('phaseY').checked;
             const showPhaseB = document.getElementById('phaseB').checked;
             
-            // Filter by date if selected
+            // Filter by date
             let filteredData = chartData;
             const dateFilter = document.getElementById('dateFilter').value;
             
             if (dateFilter) {
                 const selectedDate = new Date(dateFilter);
+                const year = selectedDate.getFullYear();
+                const month = selectedDate.getMonth();
+                const day = selectedDate.getDate();
+                
                 filteredData = chartData.filter(item => {
-                    const itemDate = new Date(item.timestamp);
-                    return itemDate.getFullYear() === selectedDate.getFullYear() &&
-                           itemDate.getMonth() === selectedDate.getMonth() &&
-                           itemDate.getDate() === selectedDate.getDate();
+                    const itemDate = item.timestamp;
+                    return itemDate.getFullYear() === year &&
+                           itemDate.getMonth() === month &&
+                           itemDate.getDate() === day;
                 });
             }
             
-            // Prepare series data
+            // Prepare series data efficiently
             const seriesData = [
                 {
                     name: 'Phase R (°C)',
@@ -737,30 +729,14 @@
                 }
             ];
             
-            // Update chart series with animation
-            chart.updateSeries(seriesData);
+            // Update chart series and options in one operation if possible
+            const updateOptions = {};
             
-            // Update X-axis and Y-axis ranges if custom
-            updateChartAxes(filteredData);
-            
-            // Update threshold line if set
-            updateThresholdLine();
-            
-            // Update highest temperatures
-            updateHighestTemperatures(filteredData);
-        }
-        
-        // Update chart axes based on custom settings
-        function updateChartAxes(filteredData) {
-            let xaxisOptions = {};
-            let yaxisOptions = {};
-            
-            // X-axis custom range
+            // Handle custom axis settings
             if (customXaxis && filteredData.length > 0) {
-                const selectedDate = new Date(document.getElementById('dateFilter').value);
+                const selectedDate = new Date(dateFilter);
                 
                 if (xaxisMinValue && xaxisMaxValue) {
-                    // Create start and end times
                     const startTimeParts = xaxisMinValue.split(':');
                     const endTimeParts = xaxisMaxValue.split(':');
                     
@@ -770,38 +746,54 @@
                     const maxTime = new Date(selectedDate);
                     maxTime.setHours(parseInt(endTimeParts[0]), parseInt(endTimeParts[1]), 0);
                     
-                    xaxisOptions = {
+                    updateOptions.xaxis = {
                         min: minTime.getTime(),
                         max: maxTime.getTime()
                     };
                 }
             }
             
-            // Y-axis custom range
             if (customYaxis) {
                 if (yaxisMinValue !== null && yaxisMaxValue !== null) {
-                    yaxisOptions = {
+                    updateOptions.yaxis = {
                         min: yaxisMinValue,
                         max: yaxisMaxValue
                     };
                 }
             }
             
-            // Apply updates to chart
-            chart.updateOptions({
-                xaxis: Object.assign({}, chart.opts.xaxis, xaxisOptions),
-                yaxis: Object.assign({}, chart.opts.yaxis, yaxisOptions, {
-                    labels: {
-                        formatter: function(val) {
-                            return val.toFixed(2);
+            // Add threshold line if set
+            if (threshold !== null) {
+                updateOptions.annotations = {
+                    yaxis: [{
+                        y: threshold,
+                        borderColor: '#FF4560',
+                        label: {
+                            borderColor: '#FF4560',
+                            style: {
+                                color: '#fff',
+                                background: '#FF4560'
+                            },
+                            text: `Threshold: ${threshold.toFixed(2)}°C`,
+                            position: 'left'
                         }
-                    },
-                    decimalsInFloat: 2
-                })
-            });
+                    }]
+                };
+            } else {
+                updateOptions.annotations = {
+                    yaxis: []
+                };
+            }
+            
+            // Apply all updates in a single operation
+            chart.updateOptions(updateOptions);
+            chart.updateSeries(seriesData);
+            
+            // Update highest temperatures based on filtered data
+            updateHighestTemperatures(filteredData);
         }
-
-        // Update the threshold line
+        
+        // Update the threshold line - simplified
         function updateThresholdLine() {
             const thresholdInput = document.getElementById('thresholdInput').value;
             const thresholdValue = parseFloat(thresholdInput);
@@ -821,16 +813,15 @@
                                     background: '#FF4560'
                                 },
                                 text: `Threshold: ${threshold.toFixed(2)}°C`,
-                                position: 'left' // Position label on the left to avoid toolbar
+                                position: 'left'
                             }
                         }]
                     }
                 });
                 
-                // Update highest temperature warning colors
+                // Update warnings
                 updateHighestTemperatureWarnings();
             } else {
-                // Clear threshold if input is empty
                 chart.updateOptions({
                     annotations: {
                         yaxis: []
@@ -841,80 +832,87 @@
             }
         }
         
-        // Update real-time temperature display
-        function updateRealTimeTemperatures() {
-            if (chartData.length === 0) return;
-            
-            const latestData = chartData[chartData.length - 1];
-            
-            // Update with animation
-            updateTemperatureDisplay('tempR', latestData.phaseR);
-            updateTemperatureDisplay('tempY', latestData.phaseY);
-            updateTemperatureDisplay('tempB', latestData.phaseB);
-        }
-        
-        // Update temperature display with animation
-        function updateTemperatureDisplay(elementId, value) {
-            const element = document.getElementById(elementId);
-            if (!element) return;
-            
-            // Prepare display value - format to 2 decimal places
-            const displayValue = value !== null ? value.toFixed(2) : 'N/A';
-            
-            // Add animation class
-            element.classList.add('updating');
-            
-            // Update value with slight delay for animation
-            setTimeout(() => {
-                element.textContent = displayValue;
-                
-                // Apply warning style if above threshold
-                if (threshold !== null && value !== null && value > threshold) {
-                    element.classList.add('temp-warning');
-                } else {
-                    element.classList.remove('temp-warning');
-                }
-                
-                // Remove animation class
-                setTimeout(() => {
-                    element.classList.remove('updating');
-                }, 300);
-            }, 100);
-        }
-        
-        // Update highest temperatures for the selected day
+        // Update highest temperatures for the selected day - fixed to ensure loading
         function updateHighestTemperatures(filteredData) {
-            if (!filteredData || filteredData.length === 0) return;
+            // If no filtered data is provided, fetch the raw data
+            if (!filteredData || filteredData.length === 0) {
+                fetch(SPREADSHEET_URL)
+                    .then(response => response.text())
+                    .then(data => {
+                        try {
+                            const json = parseSpreadsheetResponse(data);
+                            const rawData = processSpreadsheetData(json);
+                            updateHighestTemperaturesFromData(rawData);
+                        } catch (e) {
+                            console.error('Error fetching highest temperature data:', e);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error fetching highest temperature data:', error);
+                    });
+            } else {
+                // Use the provided filtered data
+                updateHighestTemperaturesFromData(filteredData);
+            }
+        }
+        
+        // Helper function to update highest temperatures from data
+        function updateHighestTemperaturesFromData(data) {
+            if (!data || data.length === 0) {
+                // No data available, reset displays
+                updateHighestTemperatureDisplay('highTempR', { value: null, timestamp: null });
+                updateHighestTemperatureDisplay('highTempY', { value: null, timestamp: null });
+                updateHighestTemperatureDisplay('highTempB', { value: null, timestamp: null });
+                return;
+            }
             
-            // Find highest temps for each phase
+            const dateFilter = document.getElementById('dateFilter').value;
+            const selectedDate = new Date(dateFilter);
+            const year = selectedDate.getFullYear();
+            const month = selectedDate.getMonth();
+            const day = selectedDate.getDate();
+            
+            // Find highest values for each phase
             let highestR = { value: null, timestamp: null };
             let highestY = { value: null, timestamp: null };
             let highestB = { value: null, timestamp: null };
             
-            filteredData.forEach(item => {
-                // Phase R
-                if (item.phaseR !== null) {
-                    if (highestR.value === null || item.phaseR > highestR.value) {
-                        highestR = { value: item.phaseR, timestamp: item.timestamp };
-                    }
-                }
+            // Filter data for selected date and find highest values
+            for (let i = 0; i < data.length; i++) {
+                const item = data[i];
+                const itemDate = item.timestamp;
                 
-                // Phase Y
-                if (item.phaseY !== null) {
-                    if (highestY.value === null || item.phaseY > highestY.value) {
-                        highestY = { value: item.phaseY, timestamp: item.timestamp };
+                // Check if item is from the selected date
+                if (itemDate.getFullYear() === year && 
+                    itemDate.getMonth() === month && 
+                    itemDate.getDate() === day) {
+                    
+                    // Phase R
+                    if (item.phaseR !== null) {
+                        if (highestR.value === null || item.phaseR > highestR.value) {
+                            highestR = { value: item.phaseR, timestamp: item.timestamp };
+                        }
+                    }
+                    
+                    // Phase Y
+                    if (item.phaseY !== null) {
+                        if (highestY.value === null || item.phaseY > highestY.value) {
+                            highestY = { value: item.phaseY, timestamp: item.timestamp };
+                        }
+                    }
+                    
+                    // Phase B
+                    if (item.phaseB !== null) {
+                        if (highestB.value === null || item.phaseB > highestB.value) {
+                            highestB = { value: item.phaseB, timestamp: item.timestamp };
+                        }
                     }
                 }
-                
-                // Phase B
-                if (item.phaseB !== null) {
-                    if (highestB.value === null || item.phaseB > highestB.value) {
-                        highestB = { value: item.phaseB, timestamp: item.timestamp };
-                    }
-                }
-            });
+            }
             
-            // Update UI
+            console.log('Highest temps:', { highestR, highestY, highestB });
+            
+            // Update UI with the highest values
             updateHighestTemperatureDisplay('highTempR', highestR);
             updateHighestTemperatureDisplay('highTempY', highestY);
             updateHighestTemperatureDisplay('highTempB', highestB);
@@ -923,7 +921,7 @@
             updateHighestTemperatureWarnings();
         }
         
-        // Update highest temperature display
+        // Update highest temperature display - simplified
         function updateHighestTemperatureDisplay(elementId, data) {
             const element = document.getElementById(elementId);
             if (!element) return;
@@ -933,9 +931,7 @@
             
             if (data.value !== null) {
                 valueEl.textContent = data.value.toFixed(2) + ' °C';
-                
-                const timeStr = data.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                timeEl.textContent = timeStr;
+                timeEl.textContent = data.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             } else {
                 valueEl.textContent = 'N/A';
                 timeEl.textContent = '--:--';
@@ -949,7 +945,7 @@
             updateHighTemperatureWarning('highTempB');
         }
         
-        // Update warning for a single highest temperature
+        // Update warning for a single highest temperature - simplified
         function updateHighTemperatureWarning(elementId) {
             const element = document.getElementById(elementId);
             if (!element) return;
@@ -957,21 +953,13 @@
             const valueEl = element.querySelector('.high-temp-value');
             if (!valueEl) return;
             
-            // Check if value exists and is above threshold
             const valueText = valueEl.textContent;
-            if (valueText !== 'N/A' && threshold !== null) {
-                const value = parseFloat(valueText);
-                if (!isNaN(value) && value > threshold) {
-                    element.classList.add('high-temp-warning');
-                    valueEl.classList.add('text-danger');
-                } else {
-                    element.classList.remove('high-temp-warning');
-                    valueEl.classList.remove('text-danger');
-                }
-            } else {
-                element.classList.remove('high-temp-warning');
-                valueEl.classList.remove('text-danger');
-            }
+            const isWarning = valueText !== 'N/A' && threshold !== null && 
+                              parseFloat(valueText) > threshold;
+            
+            // Use classList toggle for cleaner code
+            element.classList.toggle('high-temp-warning', isWarning);
+            valueEl.classList.toggle('text-danger', isWarning);
         }
         
         // Toggle axis customization section
@@ -979,13 +967,8 @@
             const controls = document.getElementById('axisControls');
             const icon = document.getElementById('toggleIcon');
             
-            if (controls.classList.contains('show')) {
-                controls.classList.remove('show');
-                icon.classList.remove('open');
-            } else {
-                controls.classList.add('show');
-                icon.classList.add('open');
-            }
+            controls.classList.toggle('show');
+            icon.classList.toggle('open');
         }
         
         // Apply axis settings
@@ -1033,59 +1016,151 @@
             showToast('Reset to dynamic axis scaling');
         }
 
-        // Initialize the dashboard
-        $(document).ready(function() {
+        // Initialize the dashboard with event delegation and proper async loading
+        document.addEventListener('DOMContentLoaded', function() {
             // Set default date to today
-            const today = new Date();
-            const formattedDate = formatDateForInput(today);
-            $('#dateFilter').val(formattedDate);
+            document.getElementById('dateFilter').value = formatDateForInput(new Date());
             
-            // Initialize chart and data
+            // Initialize chart
             initChart();
-            fetchData();
             
-            // Setup phase visibility listeners
-            $('#phaseR, #phaseY, #phaseB').on('change', updateChart);
+            // Add a loading indicator
+            const loadingToast = document.createElement('div');
+            loadingToast.className = 'toast align-items-center text-white bg-info show';
+            loadingToast.style.position = 'fixed';
+            loadingToast.style.top = '20px';
+            loadingToast.style.right = '20px';
+            loadingToast.style.zIndex = '1100';
+            loadingToast.innerHTML = `
+                <div class="d-flex">
+                    <div class="toast-body">
+                        <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                        Loading dashboard data...
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(loadingToast);
             
-            // Setup date filter listener
-            $('#dateFilter').on('change', updateChart);
+            // Load remaining scripts in parallel after critical initialization
+            function loadScript(src, callback) {
+                const script = document.createElement('script');
+                script.src = src;
+                script.async = true;
+                script.onload = callback;
+                document.body.appendChild(script);
+            }
             
-            // Setup threshold button
-            $('#applyThreshold').on('click', function() {
-                const thresholdValue = parseFloat($('#thresholdInput').val());
+            // Load non-critical scripts after page content is ready
+            loadScript('https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js', () => {});
+            loadScript('https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js', () => {});
+            
+            // Setup event listeners using delegation where possible
+            document.body.addEventListener('change', function(e) {
+                // Phase visibility toggles
+                if (e.target.id === 'phaseR' || e.target.id === 'phaseY' || e.target.id === 'phaseB') {
+                    updateChart();
+                }
                 
-                if (!isNaN(thresholdValue)) {
-                    threshold = thresholdValue;
-                    updateThresholdLine();
-                    saveThreshold(thresholdValue);
-                } else {
-                    showToast('Please enter a valid threshold value', 'error');
+                // Date filter change
+                if (e.target.id === 'dateFilter') {
+                    updateChart();
+                }
+                
+                // Custom axis checkboxes
+                if (e.target.id === 'customXaxis') {
+                    document.getElementById('xaxisMin').disabled = !e.target.checked;
+                    document.getElementById('xaxisMax').disabled = !e.target.checked;
+                }
+                
+                if (e.target.id === 'customYaxis') {
+                    document.getElementById('yaxisMin').disabled = !e.target.checked;
+                    document.getElementById('yaxisMax').disabled = !e.target.checked;
                 }
             });
             
-            // Setup axis customization listeners
-            $('#customXaxis').on('change', function() {
-                $('#xaxisMin, #xaxisMax').prop('disabled', !this.checked);
+            // Button click listeners
+            document.body.addEventListener('click', function(e) {
+                // Apply threshold button
+                if (e.target.id === 'applyThreshold') {
+                    const thresholdValue = parseFloat(document.getElementById('thresholdInput').value);
+                    
+                    if (!isNaN(thresholdValue)) {
+                        threshold = thresholdValue;
+                        updateThresholdLine();
+                        saveThreshold(thresholdValue);
+                    } else {
+                        showToast('Please enter a valid threshold value', 'error');
+                    }
+                }
+                
+                // Axis toggle
+                if (e.target.id === 'axisCustomToggle' || e.target.closest('#axisCustomToggle')) {
+                    toggleAxisControls();
+                }
+                
+                // Apply axis settings
+                if (e.target.id === 'applyAxisSettings') {
+                    applyAxisSettings();
+                }
+                
+                // Reset axis settings
+                if (e.target.id === 'resetAxisSettings') {
+                    resetAxisSettings();
+                }
             });
             
-            $('#customYaxis').on('change', function() {
-                $('#yaxisMin, #yaxisMax').prop('disabled', !this.checked);
-            });
-            
-            // Axis settings buttons
-            $('#applyAxisSettings').on('click', applyAxisSettings);
-            $('#resetAxisSettings').on('click', resetAxisSettings);
-            
-            // Setup axis toggle
-            $('#axisCustomToggle').on('click', toggleAxisControls);
-            
-            // Setup periodic data refresh
-            setInterval(fetchData, 30000);
-            
-            // Log important information for debugging
-            console.log('Dashboard initialized');
-            console.log('Using spreadsheet ID:', SPREADSHEET_ID);
-            console.log('Using Apps Script ID:', APPS_SCRIPT_ID);
+            // Fetch initial data with a small delay to allow UI to render first
+            setTimeout(() => {
+                fetchDataAndThreshold().then(() => {
+                    // Remove loading indicator
+                    const loadingToast = document.querySelector('.toast.bg-info');
+                    if (loadingToast) {
+                        loadingToast.classList.remove('show');
+                        setTimeout(() => loadingToast.remove(), 500);
+                    }
+                    
+                    showToast('Dashboard loaded successfully!', 'success');
+                    
+                    // Set up periodic refresh after initial load completes
+                    setInterval(() => {
+                        // Use a simplified fetch that just updates what's needed
+                        fetch(SPREADSHEET_URL)
+                            .then(response => response.text())
+                            .then(data => {
+                                try {
+                                    const json = parseSpreadsheetResponse(data);
+                                    
+                                    // Only update real-time displays from latest data point
+                                    if (json.table && json.table.rows && json.table.rows.length > 0) {
+                                        const latestRow = json.table.rows[json.table.rows.length - 1];
+                                        
+                                        if (latestRow && latestRow.c && latestRow.c.length >= 4) {
+                                            const livePhaseR = latestRow.c[1]?.v ?? null;
+                                            const livePhaseY = latestRow.c[2]?.v ?? null;
+                                            const livePhaseB = latestRow.c[3]?.v ?? null;
+                                            
+                                            updateTemperatureDisplay('tempR', livePhaseR);
+                                            updateTemperatureDisplay('tempY', livePhaseY);
+                                            updateTemperatureDisplay('tempB', livePhaseB);
+                                        }
+                                    }
+                                } catch (e) {
+                                    console.error('Error updating live data:', e);
+                                }
+                            });
+                    }, 20000); // Every 20 seconds for live updates
+                    
+                    // Full data refresh for chart and highest temperatures
+                    setInterval(fetchDataAndThreshold, 20000); // Every minute
+                }).catch(error => {
+                    console.error('Error in initial data load:', error);
+                    // Remove loading indicator and show error message
+                    const loadingToast = document.querySelector('.toast.bg-info');
+                    if (loadingToast) loadingToast.remove();
+                    
+                    showToast('Error loading dashboard data. Please refresh the page.', 'error');
+                });
+            }, 100);
         });
     </script>
 </body>
